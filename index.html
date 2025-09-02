@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>線上即時投票系統</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f0f2f5;
+        }
+        .container {
+            max-width: 800px;
+            margin: auto;
+            padding: 2rem;
+        }
+        .candidate-card {
+            background-color: #fff;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            transition: transform 0.2s, box-shadow 0.2s;
+            cursor: pointer;
+        }
+        .candidate-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 15px rgba(0, 0, 0, 0.15);
+        }
+        .bar-chart-bar {
+            transition: width 0.5s ease-in-out;
+            border-radius: 0.5rem;
+            height: 1.5rem;
+        }
+        .modal-overlay {
+            background-color: rgba(0, 0, 0, 0.5);
+        }
+        /* 隱藏密碼輸入的 X 圖示 */
+        input[type="password"]::-ms-reveal,
+        input[type="password"]::-ms-clear {
+            display: none;
+        }
+        input[type="password"]::-webkit-search-cancel-button {
+            -webkit-appearance: none;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen flex flex-col items-center p-4">
+
+    <!-- 主標題與副標題 -->
+    <header class="text-center my-8">
+        <h1 class="text-4xl md:text-5xl font-bold text-gray-800 tracking-tight">線上即時投票系統</h1>
+        <p class="text-lg md:text-xl text-gray-600 mt-2">請從以下候選人中選擇。</p>
+    </header>
+
+    <!-- 投票區 -->
+    <main id="voting-area" class="container grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <!-- 候選人卡片將由 JavaScript 動態生成 -->
+    </main>
+
+    <!-- 即時投票結果區 -->
+    <section class="container mt-12">
+        <h2 class="text-3xl font-bold text-gray-800 mb-4 text-center">即時投票結果</h2>
+        <div id="results-container" class="space-y-4 bg-white p-6 rounded-xl shadow-lg">
+            <!-- 投票結果長條圖將由 JavaScript 動態生成 -->
+            <p id="no-results-message" class="text-center text-gray-500 hidden">尚無投票結果。</p>
+        </div>
+    </section>
+
+    <!-- 管理面板切換按鈕 -->
+    <button id="toggle-admin-btn" class="mt-8 bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-full transition-colors">顯示管理面板</button>
+    
+    <!-- 管理面板 -->
+    <section id="admin-panel-section" class="container mt-4 hidden">
+        <div class="bg-gray-800 text-white p-6 rounded-xl shadow-lg relative">
+            <h2 class="text-3xl font-bold mb-4 text-center">管理面板</h2>
+            <button id="close-admin-btn" class="absolute top-4 right-4 text-white text-2xl hover:text-gray-400">×</button>
+            <div id="admin-login-area">
+                <p class="mb-4 text-center">輸入密碼以進入管理模式。</p>
+                <div class="flex flex-col md:flex-row gap-2 justify-center">
+                    <input id="admin-password-input" type="password" placeholder="請輸入密碼" class="flex-grow p-3 rounded-lg text-gray-800">
+                    <button id="admin-login-btn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg transition-colors">登入</button>
+                </div>
+            </div>
+            <div id="admin-panel-content" class="space-y-4 hidden">
+                <div>
+                    <h3 class="text-xl font-semibold mb-2">新增候選人</h3>
+                    <textarea id="new-candidate-names" rows="4" placeholder="請輸入候選人姓名，每行一位" class="w-full p-3 rounded-lg text-gray-800"></textarea>
+                    <button id="add-candidate-btn" class="w-full mt-2 bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-lg transition-colors">新增候選人</button>
+                </div>
+                <hr class="border-gray-600">
+                <div>
+                    <h3 class="text-xl font-semibold mb-2">危險操作</h3>
+                    <button id="clear-data-btn" class="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-6 rounded-lg transition-colors">清空所有資料</button>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- 自定義訊息彈窗 (取代 alert) -->
+    <div id="message-modal" class="fixed inset-0 flex items-center justify-center z-50 hidden">
+        <div class="modal-overlay absolute inset-0"></div>
+        <div class="bg-white p-8 rounded-xl shadow-2xl text-center z-10 w-80 md:w-96">
+            <h3 id="modal-title" class="text-2xl font-bold mb-4 text-gray-800"></h3>
+            <p id="modal-message" class="text-gray-600 mb-6"></p>
+            <button id="modal-ok-btn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded-lg transition-colors">確定</button>
+        </div>
+    </div>
+
+    <!-- Firebase JS SDK -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, getDoc, setDoc, onSnapshot, collection, runTransaction, getDocs, writeBatch } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Firebase 變數由環境提供
+        const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+
+        // 初始化 Firebase
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const auth = getAuth(app);
+        
+        // 設定日誌級別以進行調試
+        // setLogLevel('debug');
+
+        // UI 元素
+        const votingArea = document.getElementById('voting-area');
+        const resultsContainer = document.getElementById('results-container');
+        const noResultsMessage = document.getElementById('no-results-message');
+        const messageModal = document.getElementById('message-modal');
+        const modalTitle = document.getElementById('modal-title');
+        const modalMessage = document.getElementById('modal-message');
+        const modalOkBtn = document.getElementById('modal-ok-btn');
+        const adminLoginArea = document.getElementById('admin-login-area');
+        const adminPasswordInput = document.getElementById('admin-password-input');
+        const adminLoginBtn = document.getElementById('admin-login-btn');
+        const adminPanelContent = document.getElementById('admin-panel-content');
+        const newCandidateNames = document.getElementById('new-candidate-names');
+        const addCandidateBtn = document.getElementById('add-candidate-btn');
+        const clearDataBtn = document.getElementById('clear-data-btn');
+        const toggleAdminBtn = document.getElementById('toggle-admin-btn');
+        const adminPanelSection = document.getElementById('admin-panel-section');
+        const closeAdminBtn = document.getElementById('close-admin-btn');
+
+        // Firestore 路徑
+        const candidatesPath = `/artifacts/${appId}/public/data/candidates`;
+        const candidateCol = collection(db, candidatesPath);
+        
+        // votesPath 和 votesCol 將在驗證後定義
+        let votesPath = null;
+        let votesCol = null;
+
+        let userId = null;
+        const ADMIN_PASSWORD = 'weses3974893';
+
+        // --- 輔助函式 ---
+
+        /** 顯示自定義訊息彈窗 */
+        function showMessage(title, message) {
+            modalTitle.textContent = title;
+            modalMessage.textContent = message;
+            messageModal.classList.remove('hidden');
+        }
+
+        /** 隱藏自定義訊息彈窗 */
+        function hideMessage() {
+            modalMessage.classList.add('hidden');
+        }
+        modalOkBtn.addEventListener('click', hideMessage);
+
+        /**
+         * 渲染候選人卡片
+         * @param {Array} candidates - 候選人資料陣列
+         */
+        function renderCandidates(candidates) {
+            votingArea.innerHTML = '';
+            candidates.forEach(candidate => {
+                const card = document.createElement('div');
+                card.className = 'candidate-card p-6 rounded-xl text-center space-y-4 shadow-lg flex flex-col items-center';
+                card.innerHTML = `
+                    <div class="w-20 h-20 md:w-24 md:h-24 rounded-full bg-blue-100 flex items-center justify-center font-bold text-4xl text-blue-600">
+                        ${candidate.name.charAt(0)}
+                    </div>
+                    <h3 class="text-xl font-semibold text-gray-800">${candidate.name}</h3>
+                    <button class="vote-btn w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg transition-colors" data-id="${candidate.id}">投票</button>
+                `;
+                votingArea.appendChild(card);
+            });
+
+            // 為所有投票按鈕添加事件監聽器
+            document.querySelectorAll('.vote-btn').forEach(button => {
+                button.addEventListener('click', (e) => handleVote(e.target.dataset.id));
+            });
+        }
+
+        /**
+         * 渲染投票結果長條圖
+         * @param {Array} candidates - 候選人資料陣列
+         */
+        function renderResults(candidates) {
+            if (candidates.length === 0) {
+                noResultsMessage.classList.remove('hidden');
+                resultsContainer.innerHTML = '';
+                resultsContainer.appendChild(noResultsMessage);
+                return;
+            } else {
+                noResultsMessage.classList.add('hidden');
+            }
+
+            const totalVotes = candidates.reduce((sum, c) => sum + (c.votes || 0), 0);
+            resultsContainer.innerHTML = '';
+
+            candidates.sort((a, b) => (b.votes || 0) - (a.votes || 0)); // 依票數排序
+
+            candidates.forEach(candidate => {
+                const votes = candidate.votes || 0;
+                const percentage = totalVotes > 0 ? (votes / totalVotes * 100).toFixed(1) : 0;
+                const barWrapper = document.createElement('div');
+                barWrapper.className = 'flex flex-col md:flex-row items-start md:items-center space-y-2 md:space-y-0 md:space-x-4';
+                barWrapper.innerHTML = `
+                    <div class="text-lg font-semibold text-gray-800 w-full md:w-32">${candidate.name}</div>
+                    <div class="flex-grow">
+                        <div class="bar-chart-bar bg-blue-500" style="width: ${percentage}%;"></div>
+                    </div>
+                    <div class="text-gray-600 w-full md:w-24 text-right md:text-left">${votes} 票 (${percentage}%)</div>
+                `;
+                resultsContainer.appendChild(barWrapper);
+            });
+        }
+
+        // --- 程式邏輯 ---
+
+        /** 處理投票動作 */
+        async function handleVote(candidateId) {
+            if (!userId || !votesCol) {
+                showMessage('錯誤', '使用者驗證失敗，請重新載入頁面。');
+                return;
+            }
+
+            try {
+                // 使用事務確保原子性
+                await runTransaction(db, async (transaction) => {
+                    const candidateDocRef = doc(db, candidatesPath, candidateId);
+                    const voteDocRef = doc(votesCol, userId);
+
+                    const candidateDoc = await transaction.get(candidateDocRef);
+                    const voteDoc = await transaction.get(voteDocRef);
+
+                    if (!candidateDoc.exists()) {
+                        throw "Candidate does not exist!";
+                    }
+
+                    if (voteDoc.exists()) {
+                        showMessage('無法投票', '您已經投過票了，無法再次投票。');
+                        return;
+                    }
+
+                    // 更新候選人票數
+                    const newVotes = (candidateDoc.data().votes || 0) + 1;
+                    transaction.update(candidateDocRef, { votes: newVotes });
+
+                    // 記錄使用者已投票
+                    transaction.set(voteDocRef, { candidateId: candidateId, votedAt: Date.now() });
+                    showMessage('投票成功！', '您的投票已經成功送出。感謝您的參與！');
+                });
+            } catch (error) {
+                console.error("投票失敗: ", error);
+                // 再次檢查是否因為已投票而報錯
+                if (error && error.message.includes('已經投過票')) {
+                     // The showMessage is already called in the transaction, no need to do anything here.
+                } else {
+                    showMessage('投票失敗', '發生錯誤，請稍後再試。');
+                }
+            }
+        }
+
+        /** 處理新增候選人 */
+        async function addCandidate() {
+            const names = newCandidateNames.value.split('\n').filter(name => name.trim() !== '');
+            if (names.length === 0) {
+                showMessage('錯誤', '請至少輸入一位候選人姓名。');
+                return;
+            }
+            
+            const batch = writeBatch(db);
+            names.forEach(name => {
+                const newDocRef = doc(candidateCol);
+                batch.set(newDocRef, { name: name.trim(), votes: 0 });
+            });
+
+            try {
+                await batch.commit();
+                showMessage('新增成功', `成功新增 ${names.length} 位候選人！`);
+                newCandidateNames.value = '';
+            } catch (error) {
+                console.error("新增候選人失敗: ", error);
+                showMessage('新增失敗', '發生錯誤，無法新增候選人。');
+            }
+        }
+
+        /** 清空所有資料 */
+        async function clearData() {
+            // 使用自訂義訊息彈窗取代 confirm
+            const confirmed = await new Promise(resolve => {
+                showMessage('確認清空', '你確定要清空所有投票資料和候選人嗎？這個操作無法復原！');
+                modalOkBtn.textContent = '確定';
+                modalOkBtn.onclick = () => { hideMessage(); resolve(true); };
+            });
+
+            if (!confirmed) {
+                return;
+            }
+
+            try {
+                const candidateDocs = await getDocs(candidateCol);
+                const votesDocs = await getDocs(votesCol);
+
+                const batch = writeBatch(db);
+                candidateDocs.forEach(doc => batch.delete(doc.ref));
+                votesDocs.forEach(doc => batch.delete(doc.ref));
+
+                await batch.commit();
+                showMessage('清空成功', '所有投票資料和候選人名單已成功清空。');
+            } catch (error) {
+                console.error("清空資料失敗: ", error);
+                showMessage('清空失敗', '發生錯誤，無法清空資料。');
+            }
+        }
+
+        // --- 事件監聽器與初始化 ---
+
+        /** 處理登入管理面板 */
+        adminLoginBtn.addEventListener('click', () => {
+            if (adminPasswordInput.value === ADMIN_PASSWORD) {
+                adminLoginArea.classList.add('hidden');
+                adminPanelContent.classList.remove('hidden');
+                showMessage('登入成功', '您現在可以管理投票系統。');
+            } else {
+                showMessage('登入失敗', '密碼不正確。');
+            }
+        });
+
+        addCandidateBtn.addEventListener('click', addCandidate);
+        clearDataBtn.addEventListener('click', clearData);
+        toggleAdminBtn.addEventListener('click', () => {
+            adminPanelSection.classList.remove('hidden');
+            toggleAdminBtn.classList.add('hidden');
+        });
+        closeAdminBtn.addEventListener('click', () => {
+            adminPanelSection.classList.add('hidden');
+            toggleAdminBtn.classList.remove('hidden');
+        });
+
+        // Firebase 驗證狀態監聽
+        onAuthStateChanged(auth, async (user) => {
+            if (user) {
+                userId = user.uid;
+                // 在這裡定義正確的 votesPath 和 votesCol
+                votesPath = `/artifacts/${appId}/users/${userId}/votes`;
+                votesCol = collection(db, votesPath);
+                
+                // 實時監聽候選人資料
+                onSnapshot(candidateCol, (snapshot) => {
+                    const candidates = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                    renderCandidates(candidates);
+                    renderResults(candidates);
+                });
+            } else {
+                // 如果沒有登入，使用自定義 token 登入
+                if (initialAuthToken) {
+                    try {
+                        await signInWithCustomToken(auth, initialAuthToken);
+                    } catch (error) {
+                        console.error("使用自定義 token 登入失敗", error);
+                        // 轉為匿名登入
+                        signInAnonymously(auth).catch((anonError) => console.error("匿名登入失敗", anonError));
+                    }
+                } else {
+                    // 如果沒有 token，則匿名登入
+                    signInAnonymously(auth).catch((error) => console.error("匿名登入失敗", error));
+                }
+            }
+        });
+    </script>
+</body>
+</html>

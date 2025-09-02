@@ -42,7 +42,7 @@
     <div class="container mx-auto p-4 md:p-8 flex-grow">
         <!-- 標題區塊 -->
         <header class="text-center my-8">
-            <h1 class="text-4xl md:text-5xl font-bold text-gray-800">投票啦啦啦</h1>
+            <h1 class="text-4xl md:text-5xl font-bold text-gray-800">線上即時投票系統</h1>
             <p class="mt-2 text-md md:text-lg text-gray-600">請從以下候選人中選擇。</p>
         </header>
 
@@ -116,6 +116,7 @@
 
         // 在這裡替換成您自己的 Firebase 專案設定
         // 您可以在 Firebase Console 中找到這些資訊：專案設定 > 您的應用程式
+        // 🚨 步驟一：請務必用您自己的 Firebase 憑證替換以下佔位符！
         const firebaseConfig = {
             apiKey: "AIzaSyAury4xL1VDeszAT8fYTvtyrmHGEFpcp4Y",
             authDomain: "poll-76c08.firebaseapp.com",
@@ -191,10 +192,13 @@
                 const userCredential = await signInAnonymously(auth);
                 userId = userCredential.user.uid;
                 console.log("用戶已驗證，ID:", userId);
+                // 成功登入後，顯示提示
+                showModal("驗證成功，您可以開始投票。");
             } catch (error) {
                 console.error("身份驗證失敗: ", error);
                 userId = crypto.randomUUID();
                 console.log("身份驗證失敗，使用隨機 ID:", userId);
+                showModal("驗證失敗，請檢查您的 Firebase Authentication 設定。");
             }
 
             // 啟動 Firestore 監聽器
@@ -208,11 +212,11 @@
                 return;
             }
 
-            // 更新路徑以符合 Firebase 規範
-            const candidatesCollection = collection(db, `voting/candidates`);
+            // 將路徑改為頂層集合
+            const candidatesCollectionRef = collection(db, `candidates`);
             
             // 監聽候選人資料的即時變化
-            onSnapshot(candidatesCollection, (snapshot) => {
+            onSnapshot(candidatesCollectionRef, (snapshot) => {
                 const candidates = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                 updateUI(candidates);
             }, (error) => {
@@ -304,10 +308,13 @@
                 showModal("正在驗證身份，請稍後再試。");
                 return;
             }
+            
+            // 將路徑改為頂層集合
+            const usersCollectionRef = collection(db, `users`);
+            const candidatesCollectionRef = collection(db, `candidates`);
 
-            // 更新路徑以符合 Firebase 規範
-            const userVoteDocRef = doc(db, `voting/users/${userId}`);
-            const candidateDocRef = doc(db, `voting/candidates/${candidateId}`);
+            const userVoteDocRef = doc(usersCollectionRef, userId);
+            const candidateDocRef = doc(candidatesCollectionRef, candidateId);
 
             try {
                 // 檢查使用者是否已投票
@@ -358,8 +365,8 @@
                 showModal("資料庫未初始化，請稍後再試。");
                 return;
             }
-            // 更新路徑以符合 Firebase 規範
-            const candidatesCollection = collection(db, `voting/candidates`);
+            // 將路徑改為頂層集合
+            const candidatesCollectionRef = collection(db, `candidates`);
             const names = candidateNamesTextarea.value.split('\n').map(name => name.trim()).filter(name => name);
             if (names.length === 0) {
                 showModal("請輸入至少一位候選人姓名。");
@@ -368,7 +375,7 @@
             try {
                 const batch = writeBatch(db);
                 for (const name of names) {
-                    const newCandidateDoc = doc(candidatesCollection); // 自動生成ID
+                    const newCandidateDoc = doc(candidatesCollectionRef); // 自動生成ID
                     batch.set(newCandidateDoc, {
                         name: name,
                         votes: 0
@@ -390,19 +397,19 @@
                     showModal("資料庫未初始化，請稍後再試。");
                     return;
                 }
-                // 更新路徑以符合 Firebase 規範
-                const candidatesCollection = collection(db, `voting/candidates`);
-                const usersCollection = collection(db, `voting/users`);
+                // 將路徑改為頂層集合
+                const candidatesCollectionRef = collection(db, `candidates`);
+                const usersCollectionRef = collection(db, `users`);
 
                 try {
                     const batch = writeBatch(db);
                     // 刪除所有候選人
-                    const candidatesSnapshot = await getDocs(candidatesCollection);
+                    const candidatesSnapshot = await getDocs(candidatesCollectionRef);
                     candidatesSnapshot.docs.forEach(doc => {
                         batch.delete(doc.ref);
                     });
                     // 刪除所有使用者投票記錄
-                    const usersSnapshot = await getDocs(usersCollection);
+                    const usersSnapshot = await getDocs(usersCollectionRef);
                     usersSnapshot.docs.forEach(doc => {
                         batch.delete(doc.ref);
                     });
@@ -422,4 +429,3 @@
 </body>
 
 </html>
-

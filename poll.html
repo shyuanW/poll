@@ -109,21 +109,26 @@
     <!-- Firebase JS SDK -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, doc, getDoc, setDoc, onSnapshot, collection, runTransaction, getDocs, writeBatch } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        // Firebase 變數由環境提供
-        const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
-        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        // Firebase 配置由您在 Firebase 專案中取得
+        const firebaseConfig = {
+            apiKey: "YOUR_API_KEY",
+            authDomain: "YOUR_AUTH_DOMAIN",
+            projectId: "YOUR_PROJECT_ID",
+            storageBucket: "YOUR_STORAGE_BUCKET",
+            messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
+            appId: "YOUR_APP_ID"
+        };
+        
+        // 替換您自己的 Firebase 設定
+        // 例如: const firebaseConfig = { apiKey: "AIza...Wk", authDomain: "your-project.firebaseapp.com", ... };
 
         // 初始化 Firebase
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
         const auth = getAuth(app);
-        
-        // 設定日誌級別以進行調試
-        // setLogLevel('debug');
 
         // UI 元素
         const votingArea = document.getElementById('voting-area');
@@ -145,14 +150,13 @@
         const closeAdminBtn = document.getElementById('close-admin-btn');
 
         // Firestore 路徑
-        const candidatesPath = `/artifacts/${appId}/public/data/candidates`;
+        const candidatesPath = `/public/data/candidates`;
         const candidateCol = collection(db, candidatesPath);
         
-        // votesPath 和 votesCol 將在驗證後定義
         let votesPath = null;
         let votesCol = null;
-
         let userId = null;
+        
         const ADMIN_PASSWORD = 'weses3974893';
 
         // --- 輔助函式 ---
@@ -357,30 +361,16 @@
         onAuthStateChanged(auth, async (user) => {
             if (user) {
                 userId = user.uid;
-                // 在這裡定義正確的 votesPath 和 votesCol
-                votesPath = `/artifacts/${appId}/users/${userId}/votes`;
+                votesPath = `/users/${userId}/votes`;
                 votesCol = collection(db, votesPath);
                 
-                // 實時監聽候選人資料
                 onSnapshot(candidateCol, (snapshot) => {
                     const candidates = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                     renderCandidates(candidates);
                     renderResults(candidates);
                 });
             } else {
-                // 如果沒有登入，使用自定義 token 登入
-                if (initialAuthToken) {
-                    try {
-                        await signInWithCustomToken(auth, initialAuthToken);
-                    } catch (error) {
-                        console.error("使用自定義 token 登入失敗", error);
-                        // 轉為匿名登入
-                        signInAnonymously(auth).catch((anonError) => console.error("匿名登入失敗", anonError));
-                    }
-                } else {
-                    // 如果沒有 token，則匿名登入
-                    signInAnonymously(auth).catch((error) => console.error("匿名登入失敗", error));
-                }
+                signInAnonymously(auth).catch((error) => console.error("匿名登入失敗", error));
             }
         });
     </script>
